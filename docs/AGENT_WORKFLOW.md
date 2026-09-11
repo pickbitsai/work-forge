@@ -61,6 +61,12 @@ On Windows, use a native `.exe` or `node` with the CLI's JavaScript entry point.
 `.cmd` and `.bat` shell wrappers are deliberately unsupported. Adapter output is
 limited to 1 MB, and failed or timed-out runs leave the task pending.
 
+The runner sends an adapter-mode preface requesting JSON on stdout. If stdout is
+not valid JSON and the agent writes a fresh `result.json` instead, the runner
+imports that file. For Claude Code, arguments `["-p","--output-format","text","--tools",""]`
+keep it on stdout. An `ANTHROPIC_API_KEY` environment variable (even an empty one)
+overrides subscription login for `claude -p`.
+
 The runner is an integration convenience, not a security sandbox. Configure your
 agent's own file/network permissions. A cloud-backed agent can transmit every byte
 in the packet to its provider. Private sources stay local until you choose to hand

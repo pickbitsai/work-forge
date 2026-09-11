@@ -76,6 +76,50 @@ test('agent output is atomic, cannot approve itself, and cannot be replayed', t 
   assert.equal(load(root).claims[1].status, 'proposed');
   assert.throws(() => importTask(root, task.id, { claims: [] }), /already been imported/);
 });
+test('task prompts describe importer limits before the output example and retain qualification categories', t => {
+  const root = workspace(t), { claim } = seed(root), job = addJob(root, fakeJob);
+  reviewClaim(root, claim.id, 'approved');
+  for (const kind of ['qualifications', 'interview', 'fit', 'resume', 'resume-preview']) {
+    const task = createTask(root, kind, job.id);
+    assert.match(task.prompt, /## Output limits/);
+    assert(task.prompt.indexOf('## Output limits') < task.prompt.indexOf('## Output example'));
+    const limits = task.prompt.split('## Output limits\n\n')[1].split('\n\n## Output example')[0];
+    assert(limits.split('\n').length >= 2 && limits.split('\n').length <= 4);
+    if (kind === 'qualifications') {
+      assert.match(task.prompt, /experience, project, skill, education, certification, achievement/);
+      assert.match(limits, /skills: 0–40 items per claim, each under 200 characters/);
+    } else if (kind === 'interview') {
+      assert.match(limits, /questions: 0–12 objects; each question: 1–1200 characters/);
+    } else {
+      assert.match(limits, /claimIds: 1–20 IDs from the task input, each under 200 characters/);
+      assert.match(limits, /gaps: 0–40 items, each under 200 characters/);
+      if (kind === 'fit') assert.match(limits, /assessment: 1–6000 characters; strengths: 0–30/);
+      else assert.match(limits, /headline and section title: 1–200 characters/);
+    }
+  }
+});
+for (const [format, wrap] of [
+  ['clean JSON', json => json],
+  ['JSON fences', json => '```json\n' + json + '\n```'],
+  ['prose', json => 'Here you go:\n' + json + '\nDone.'],
+  ['prose and JSON fences', json => 'Here you go:\n```json\n' + json + '\n```\nDone.']
+]) test(`agent import accepts ${format}`, t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), result = { questions: [{ question: 'x' }] };
+  const imported = importTask(root, task.id, wrap(JSON.stringify(result)));
+  assert.equal(imported.status, 'imported');
+  assert.deepEqual(imported.result, result);
+  assert(load(root).questions.some(q => q.question === 'x'));
+});
+test('JSON recovery preserves parse errors and still validates clean JSON', t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), raw = 'Here you go:\n{"questions":}\nDone.';
+  let original;
+  try { JSON.parse(raw); } catch (error) { original = error; }
+  assert.throws(() => importTask(root, task.id, raw), error => error instanceof SyntaxError && error.message === original.message);
+  assert.throws(() => importTask(root, task.id, '[{"questions":[]}]'), /must be a JSON object/);
+  assert.equal(load(root).tasks[0].status, 'pending');
+});
 test('packets become stale when input sources change', t => {
   const root = workspace(t); seed(root);
   const task = createTask(root, 'qualifications');
@@ -179,10 +223,63 @@ test('generic stdin/stdout adapter validates the same contract without shell exp
   const root = workspace(t); seed(root);
   const task = createTask(root, 'interview');
   const script = path.join(root, 'fixture-agent.mjs');
-  fs.writeFileSync(script, `let p='';process.stdin.on('data',d=>p+=d);process.stdin.on('end',()=>{if(!p.includes('Work Forge task'))process.exit(2);process.stdout.write(JSON.stringify({questions:[{question:'What was your specific contribution?'}]}));});`);
+  fs.writeFileSync(script, `let p='';process.stdin.on('data',d=>p+=d);process.stdin.on('end',()=>{if(!p.startsWith('ADAPTER MODE: you are running as a stdin/stdout adapter. Print ONLY the JSON object to stdout. No prose, no code fences. Do not write result.json or any file.\\n\\n')||!p.includes('Work Forge task'))process.exit(2);process.stdout.write(JSON.stringify({questions:[{question:'What was your specific contribution?'}]}));});`);
   const output = await runAdapter(root, task.id, { command: process.execPath, args: [script] });
   assert.equal(output.status, 'imported');
   assert.equal(load(root).questions.length, 9);
+  assert.equal(fs.readFileSync(path.join(task.directory, 'prompt.md'), 'utf8'), task.prompt);
+});
+test('adapter imports a fresh result file when stdout is prose', async t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), script = path.join(root, 'fixture-agent.mjs');
+  fs.writeFileSync(script, `import fs from 'node:fs';import path from 'node:path';process.stdin.resume();process.stdin.on('end',()=>{fs.writeFileSync(path.join(process.cwd(),'result.json'),JSON.stringify({questions:[{question:'x'}]}));process.stdout.write('I wrote the file');});`);
+  const output = await runAdapter(root, task.id, { command: process.execPath, args: [script] });
+  assert.equal(output.status, 'imported');
+  assert.deepEqual(output.result, { questions: [{ question: 'x' }] });
+  assert.equal(load(root).tasks[0].status, 'imported');
+});
+test('adapter prose without a result file reports the parse error and first 200 stdout characters', async t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), script = path.join(root, 'fixture-agent.mjs');
+  const stdout = 'I wrote no file. ' + 'x'.repeat(250) + 'End of output.';
+  fs.writeFileSync(script, `process.stdin.resume();process.stdin.on('end',()=>process.stdout.write(${JSON.stringify(stdout)}));`);
+  await assert.rejects(runAdapter(root, task.id, { command: process.execPath, args: [script] }), error => {
+    assert(error instanceof SyntaxError);
+    assert.match(error.message, /is not valid JSON/);
+    assert(error.message.endsWith('Adapter stdout (first 200 characters): ' + stdout.slice(0, 200)));
+    assert(!error.message.includes('End of output.'));
+    return true;
+  });
+  assert.equal(load(root).tasks[0].status, 'pending');
+});
+test('adapter does not import a stale result file', async t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), script = path.join(root, 'fixture-agent.mjs');
+  const resultPath = path.join(task.directory, 'result.json');
+  fs.writeFileSync(resultPath, JSON.stringify({ questions: [{ question: 'x' }] }));
+  fs.utimesSync(resultPath, new Date(0), new Date(0));
+  fs.writeFileSync(script, `process.stdin.resume();process.stdin.on('end',()=>process.stdout.write('I wrote no file'));`);
+  await assert.rejects(runAdapter(root, task.id, { command: process.execPath, args: [script] }), /is not valid JSON/);
+  assert.equal(load(root).tasks[0].status, 'pending');
+});
+test('adapter file fallback does not bypass stdout validation errors', async t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), script = path.join(root, 'fixture-agent.mjs');
+  fs.writeFileSync(script, `import fs from 'node:fs';process.stdin.resume();process.stdin.on('end',()=>{fs.writeFileSync('result.json',JSON.stringify({questions:[{question:'x'}]}));process.stdout.write(JSON.stringify({questions:[{question:''}]}));});`);
+  await assert.rejects(runAdapter(root, task.id, { command: process.execPath, args: [script] }), /Question must be/);
+  assert.equal(load(root).tasks[0].status, 'pending');
+});
+test('adapter preserves the stdout parse error if its fresh result file fails validation', async t => {
+  const root = workspace(t); seed(root);
+  const task = createTask(root, 'interview'), script = path.join(root, 'fixture-agent.mjs');
+  fs.writeFileSync(script, `import fs from 'node:fs';process.stdin.resume();process.stdin.on('end',()=>{fs.writeFileSync('result.json',JSON.stringify({questions:[{question:''}]}));process.stdout.write('I wrote the file');});`);
+  await assert.rejects(runAdapter(root, task.id, { command: process.execPath, args: [script] }), error => {
+    assert(error instanceof SyntaxError);
+    assert.match(error.message, /is not valid JSON/);
+    assert(error.message.endsWith('Adapter stdout (first 200 characters): I wrote the file'));
+    return true;
+  });
+  assert.equal(load(root).tasks[0].status, 'pending');
 });
 test('HTTP server rejects cross-origin mutations, invalid tokens, and file traversal', async t => {
   const root = workspace(t), server = createServer(root);
