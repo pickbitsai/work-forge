@@ -1,0 +1,8 @@
+FICTIONAL EXAMPLE — not a real candidate.
+
+Example Candidate
+Software Engineer at Example Company, January 2021–December 2024.
+Built Java REST APIs for an internal inventory application.
+Contributed SQL queries and unit tests to the inventory service.
+Personal project: created a Python prototype that organizes public-domain books.
+The prototype was not deployed to production and has no claimed usage metrics.

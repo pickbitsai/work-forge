@@ -1,0 +1,8 @@
+{
+  "name": "Example Candidate",
+  "headline": "Software Engineer",
+  "roles": ["Software Engineer"],
+  "locations": ["Remote"],
+  "keywords": ["Java", "APIs"],
+  "exclude": ["Intern"]
+}

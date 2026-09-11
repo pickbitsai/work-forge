@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Build your qualifications from real work, then find the next opportunity. A local workspace for any coding agent.">
+  <title>Work Forge — Your work, on record</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <a class="brand" href="#sources"><span class="brand-mark">W<span>F</span></span><span>Work Forge<small>YOUR WORK, ON RECORD</small></span></a>
+      <nav aria-label="Workspace">
+        <a href="#sources" data-page="sources"><span>01</span> Evidence library <b id="source-count">0</b></a>
+        <a href="#interview" data-page="interview"><span>02</span> Your story</a>
+        <a href="#qualifications" data-page="qualifications"><span>03</span> Qualifications <b id="claim-count">0</b></a>
+        <a href="#feed" data-page="feed"><span>04</span> Work feed <b id="job-count">0</b></a>
+        <a href="#agents" data-page="agents"><span>05</span> Agent workspace</a>
+        <a href="#profile" data-page="profile"><span>06</span> Search preferences</a>
+      </nav>
+      <div class="local-note"><span class="dot"></span> Runs on your computer<p>Your evidence stays in this workspace. You choose what to send to an agent.</p><small id="workspace-path"></small></div>
+    </aside>
+    <main>
+      <header><span id="breadcrumb">WORKSPACE / EVIDENCE</span><span class="version">LOCAL EDITION <b>0.1</b></span></header>
+      <div id="app" aria-live="polite"></div>
+      <footer>Built from evidence. Shaped by you. <span>Plain files · Your agent · Your next move</span></footer>
+    </main>
+  </div>
+  <div id="notice" role="status" hidden></div>
+  <dialog id="detail"><button class="dialog-close secondary" aria-label="Close details">Close ×</button><div id="detail-content"></div></dialog>
+</body>
+</html>

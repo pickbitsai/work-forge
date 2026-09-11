@@ -1,0 +1,17 @@
+{
+  "name": "work-forge-local",
+  "version": "0.1.0",
+  "description": "A local qualifications repository and job feed for any coding agent.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.13.0" },
+  "bin": { "work-forge": "bin/forge.mjs" },
+  "scripts": {
+    "start": "node bin/forge.mjs serve",
+    "test": "node --test test/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "bundle": "node scripts/bundle.mjs"
+  },
+  "files": ["bin/", "src/", "public/", "docs/", "examples/", "scripts/", "test/", "AGENTS.md", "README.md", "LICENSE", "package-lock.json"],
+  "dependencies": { "mammoth": "1.12.2", "pdfjs-dist": "6.3.289" }
+}

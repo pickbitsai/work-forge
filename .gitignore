@@ -1,0 +1,9 @@
+node_modules/
+workspace/
+*.local.json
+.env
+.env.*
+*.log
+*.tgz
+dist/
+.DS_Store
